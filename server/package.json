@@ -1,0 +1,1 @@
+{"name":"explain-this-local-server","private":true,"type":"module","scripts":{"start":"node index.mjs"},"dependencies":{"@google/genai":"^1.28.0","cors":"^2.8.5","dotenv":"^17.2.2","express":"^5.1.0"}}
