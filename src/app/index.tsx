@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const modes = ['Simply', 'Step by step', 'Summary'] as const;
@@ -31,6 +31,7 @@ export default function HomeScreen() {
         mediaTypes: ['images'],
         allowsMultipleSelection: false,
         allowsEditing: false,
+        base64: true,
         quality: 1,
       });
       // Keep the current picture if the user cancels replacement.
@@ -57,7 +58,7 @@ export default function HomeScreen() {
         setNotice('Camera permission is needed to take a photo. You can allow it in the tablet settings.');
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 1 });
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: false, base64: true, quality: 1 });
       if (result.canceled) return;
       const selected = result.assets?.[0];
       if (!selected?.uri) { setNotice('We couldn’t use that photo. Please try again.'); return; }
@@ -78,10 +79,17 @@ export default function HomeScreen() {
 
   async function explainImage() {
     if (!image || explaining) return;
-    setExplanation(''); setExplaining(true);
-    await new Promise(resolve => setTimeout(resolve, 900));
-    setExplaining(false);
-    setExplanation('Your image is ready to be explained. The Gemini connection is the next step.');
+    if (!image.base64) { setNotice('This image could not be prepared. Please choose it again.'); return; }
+    setExplanation(''); setNotice(''); setExplaining(true);
+    const serverUrl = Platform.OS === 'web' ? 'http://localhost:8787' : 'http://192.168.1.66:8787';
+    try {
+      const response = await fetch(`${serverUrl}/explain`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageBase64: image.base64, mimeType: image.mimeType || 'image/jpeg', mode: modes[mode] }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Request failed');
+      setExplanation(data.explanation);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'We couldn’t get an explanation. Please try again.');
+    } finally { setExplaining(false); }
   }
   return (
     <SafeAreaView style={s.page}>

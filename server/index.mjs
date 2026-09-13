@@ -19,7 +19,7 @@ app.post('/explain', async (request, response) => {
   if (!['Simply', 'Step by step', 'Summary'].includes(mode)) return response.status(400).json({ error: 'Please choose a valid explanation style.' });
   const prompt = mode === 'Step by step' ? 'Explain this image step by step in clear, beginner-friendly language. State uncertainty when something is unclear.' : mode === 'Summary' ? 'Summarize the important information in this image in a few concise bullet points. State uncertainty when something is unclear.' : 'Explain this image simply, as if helping a curious beginner. Define unfamiliar terms and state uncertainty when something is unclear.';
   try {
-    const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: imageBase64 } }, { text: prompt }] }] });
+    const result = await ai.models.generateContent({ model: 'gemini-3.6-flash', contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: imageBase64 } }, { text: prompt }] }] });
     return response.json({ explanation: result.text || 'Gemini returned an empty explanation.' });
   } catch (error) {
     console.error('Gemini request failed:', error);
