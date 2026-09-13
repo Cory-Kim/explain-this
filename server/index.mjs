@@ -26,4 +26,13 @@ app.post('/explain', async (request, response) => {
     return response.status(502).json({ error: 'Gemini could not explain that image right now. Please try again.' });
   }
 });
+app.post('/follow-up', async (request, response) => {
+  if (!ai) return response.status(503).json({ error: 'The server has no Gemini key yet.' });
+  const { imageBase64, mimeType = 'image/jpeg', question, language = 'English', previousExplanation = '' } = request.body ?? {};
+  if (typeof imageBase64 !== 'string' || !imageBase64 || typeof question !== 'string' || !question.trim()) return response.status(400).json({ error: 'Please provide an image and question.' });
+  try {
+    const result = await ai.models.generateContent({ model: 'gemini-3.6-flash', contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: imageBase64 } }, { text: `Answer this follow-up question about the image: ${question.trim()}\nPrevious explanation: ${previousExplanation}\nRespond entirely in ${language}, clearly and accurately. State uncertainty when needed.` }] }] });
+    return response.json({ answer: result.text || 'Gemini returned an empty answer.' });
+  } catch (error) { console.error('Gemini follow-up failed:', error); return response.status(502).json({ error: 'Gemini could not answer that question right now. Please try again.' }); }
+});
 app.listen(port, '0.0.0.0', () => console.log(`Explain This server listening on http://localhost:${port}`));
