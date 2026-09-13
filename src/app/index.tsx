@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const modes = ['Simply', 'Step by step', 'Summary'] as const;
 const languages = ['English', '한국어', '日本語', 'Español', 'Français'] as const;
+const FREE_REQUESTS = 5;
 const examples = [
   { icon: '>_', title: 'An error message', detail: 'Understand what went wrong', question: 'Cannot read properties of undefined', answers: ['Your code tried to read a value from something that does not exist yet. Check that the data has loaded before using it.', '1. Find the line mentioned in the error.\n2. Check which value is undefined.\n3. Handle missing data before reading its properties.', 'Check that your data exists before accessing it.'] },
   { icon: 'x²', title: 'A math problem', detail: 'Make the steps make sense', question: '2x + 6 = 14', answers: ['Subtract 6 from both sides to get 2x = 8. Divide both sides by 2, and you get x = 4.', '1. Start with 2x + 6 = 14.\n2. Subtract 6: 2x = 8.\n3. Divide by 2: x = 4.\n4. Check: 2(4) + 6 = 14.', 'x = 4'] },
@@ -26,6 +27,7 @@ export default function HomeScreen() {
   const [question, setQuestion] = useState('');
   const [followUp, setFollowUp] = useState('');
   const [asking, setAsking] = useState(false);
+  const [requestCount, setRequestCount] = useState(0);
   const current = sample === null ? null : examples[sample];
 
   async function chooseImage() {
@@ -85,6 +87,7 @@ export default function HomeScreen() {
 
   async function explainImage() {
     if (!image || explaining) return;
+    if (requestCount >= FREE_REQUESTS) { setNotice(`You’ve used all ${FREE_REQUESTS} free requests in this session. Please try again later.`); return; }
     if (!image.base64) { setNotice('This image could not be prepared. Please choose it again.'); return; }
     setExplanation(''); setNotice(''); setExplaining(true);
     const serverUrl = Platform.OS === 'web' ? 'http://localhost:8787' : 'http://192.168.1.66:8787';
@@ -93,6 +96,7 @@ export default function HomeScreen() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Request failed');
       setExplanation(data.explanation);
+      setRequestCount(count => count + 1);
       setFollowUp('');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'We couldn’t get an explanation. Please try again.');
@@ -101,13 +105,14 @@ export default function HomeScreen() {
 
   async function askFollowUp() {
     if (!image?.base64 || !question.trim() || asking) return;
+    if (requestCount >= FREE_REQUESTS) { setNotice(`You’ve used all ${FREE_REQUESTS} free requests in this session. Please try again later.`); return; }
     setAsking(true); setNotice('');
     const serverUrl = Platform.OS === 'web' ? 'http://localhost:8787' : 'http://192.168.1.66:8787';
     try {
       const response = await fetch(`${serverUrl}/follow-up`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageBase64: image.base64, mimeType: image.mimeType || 'image/jpeg', question: question.trim(), language: languages[language], previousExplanation: explanation }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Request failed');
-      setFollowUp(data.answer); setQuestion('');
+      setFollowUp(data.answer); setQuestion(''); setRequestCount(count => count + 1);
     } catch (error) { setNotice(error instanceof Error ? error.message : 'We couldn’t answer that question. Please try again.'); }
     finally { setAsking(false); }
   }
@@ -150,7 +155,7 @@ export default function HomeScreen() {
               {image && <Pressable accessibilityRole="button" onPress={removeImage} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Remove image</Text></Pressable>}
               {image && <Pressable accessibilityRole="button" disabled={explaining} onPress={explainImage} style={({ pressed }) => [s.explain, pressed && s.pressed, explaining && s.disabled]}>{explaining ? <><ActivityIndicator color="#FFFFFF" size="small" /><Text style={s.primaryText}>Preparing explanation…</Text></> : <Text style={s.primaryText}>✦  Explain this image</Text>}</Pressable>}
               <Pressable accessibilityRole="button" onPress={takePhoto} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Take a photo</Text></Pressable>
-              <Text style={s.caption}>{image ? 'Preview only · AI explanations are coming next' : 'Your image stays on your device until AI is connected'}</Text>
+              <Text style={s.caption}>{image ? `${FREE_REQUESTS - requestCount} free requests remaining in this session` : 'Your image stays on your device until AI is connected'}</Text>
               {!!notice && <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text>}
               {!!explanation && <Text accessibilityLiveRegion="polite" style={s.explanation}>{explanation}</Text>}
               {!!explanation && <View style={s.followUp}><Text style={s.followTitle}>Still curious?</Text><TextInput value={question} onChangeText={setQuestion} placeholder="Ask a follow-up about this image…" placeholderTextColor="#889386" multiline style={s.questionInput} /><Pressable accessibilityRole="button" disabled={asking || !question.trim()} onPress={askFollowUp} style={({ pressed }) => [s.askButton, pressed && s.pressed, (asking || !question.trim()) && s.disabled]}>{asking ? <><ActivityIndicator color="#FFFFFF" size="small" /><Text style={s.primaryText}>Thinking…</Text></> : <Text style={s.primaryText}>Ask follow-up</Text>}</Pressable>{!!followUp && <View style={s.followAnswer}><Text style={s.answerLabel}>FOLLOW-UP ANSWER</Text><Text style={s.answer}>{followUp}</Text></View>}</View>}
