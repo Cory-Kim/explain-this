@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const modes = ['Simply', 'Step by step', 'Summary'] as const;
@@ -18,6 +18,8 @@ export default function HomeScreen() {
   const [notice, setNotice] = useState('');
   const [image, setImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [previewError, setPreviewError] = useState(false);
+  const [explaining, setExplaining] = useState(false);
+  const [explanation, setExplanation] = useState('');
   const current = sample === null ? null : examples[sample];
 
   async function chooseImage() {
@@ -70,7 +72,16 @@ export default function HomeScreen() {
   function removeImage() {
     setImage(null);
     setPreviewError(false);
+    setExplanation('');
     setNotice('');
+  }
+
+  async function explainImage() {
+    if (!image || explaining) return;
+    setExplanation(''); setExplaining(true);
+    await new Promise(resolve => setTimeout(resolve, 900));
+    setExplaining(false);
+    setExplanation('Your image is ready to be explained. The Gemini connection is the next step.');
   }
   return (
     <SafeAreaView style={s.page}>
@@ -109,9 +120,11 @@ export default function HomeScreen() {
               </View>
               <Pressable accessibilityRole="button" onPress={chooseImage} style={({ pressed }) => [s.primary, pressed && s.pressed]}><Text style={s.primaryText}>{image ? 'Replace image' : '＋  Choose an image'}</Text></Pressable>
               {image && <Pressable accessibilityRole="button" onPress={removeImage} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Remove image</Text></Pressable>}
+              {image && <Pressable accessibilityRole="button" disabled={explaining} onPress={explainImage} style={({ pressed }) => [s.explain, pressed && s.pressed, explaining && s.disabled]}>{explaining ? <><ActivityIndicator color="#FFFFFF" size="small" /><Text style={s.primaryText}>Preparing explanation…</Text></> : <Text style={s.primaryText}>✦  Explain this image</Text>}</Pressable>}
               <Pressable accessibilityRole="button" onPress={takePhoto} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Take a photo</Text></Pressable>
               <Text style={s.caption}>{image ? 'Preview only · AI explanations are coming next' : 'Your image stays on your device until AI is connected'}</Text>
               {!!notice && <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text>}
+              {!!explanation && <Text accessibilityLiveRegion="polite" style={s.explanation}>{explanation}</Text>}
             </View>
           </View>
           <View style={s.preferences}>
@@ -136,7 +149,7 @@ const s = StyleSheet.create({
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10 }, logo: { width: 38, height: 38, backgroundColor: '#225C46', borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, logoText: { fontSize: 29, color: '#DFF2BB' }, brandText: { fontSize: 23, fontWeight: '700', color: '#202D26', letterSpacing: -0.8 }, tag: { fontSize: 12, color: '#667264' },
   hero: { paddingVertical: 40, gap: 30 }, heroWide: { flexDirection: 'row', alignItems: 'center', gap: 48, paddingVertical: 56 }, intro: { flex: 1, gap: 22 }, eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, color: '#52715B', lineHeight: 18 }, heading: { fontSize: 52, fontWeight: '700', letterSpacing: -2.5, lineHeight: 61, color: '#202D26' }, headingSmall: { fontSize: 38, lineHeight: 46, letterSpacing: -1.7 }, green: { color: '#47785B' }, subtitle: { fontSize: 17, lineHeight: 28, color: '#687166', maxWidth: 440 }, steps: { fontSize: 11, color: '#485A4C', lineHeight: 22, fontWeight: '600', paddingTop: 8 },
   capture: { padding: 24, borderRadius: 24, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DEE5D8', gap: 12, boxShadow: '0px 12px 40px rgba(36,65,34,0.05)' }, row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }, sectionTitle: { fontSize: 17, fontWeight: '600', color: '#263D2D', marginBottom: 4 }, star: { fontSize: 25, color: '#658E65' }, imageArea: { alignItems: 'center', paddingHorizontal: 12, paddingVertical: 26, backgroundColor: '#F5F7EF', borderRadius: 16, marginVertical: 4, borderWidth: 1, borderColor: '#E4E9D9', borderStyle: 'dashed', gap: 9 }, picture: { width: 66, height: 53, borderWidth: 2, borderColor: '#6F8A5B', borderRadius: 10, overflow: 'hidden', marginBottom: 10, transform: [{ rotate: '-7deg' }], backgroundColor: '#E9EFD9' }, sun: { width: 10, height: 10, backgroundColor: '#789354', borderRadius: 5, margin: 9 }, mountain: { width: 47, height: 47, backgroundColor: '#BDCDA3', transform: [{ rotate: '45deg' }], left: 17 }, uploadTitle: { fontSize: 13, fontWeight: '600', color: '#405039', textAlign: 'center' }, hint: { color: '#6C7569', fontSize: 12, lineHeight: 20 },
-  primary: { minHeight: 49, backgroundColor: '#245D46', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }, primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' }, secondary: { minHeight: 46, borderWidth: 1, borderColor: '#DFE5D9', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }, secondaryText: { color: '#354A3B', fontSize: 13, fontWeight: '600' }, caption: { fontSize: 10, color: '#747E70', textAlign: 'center', lineHeight: 17 }, notice: { fontSize: 12, color: '#35523D', lineHeight: 19, padding: 12, backgroundColor: '#EDF3E7', borderRadius: 8 }, pressed: { opacity: 0.7 },
+  primary: { minHeight: 49, backgroundColor: '#245D46', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }, explain: { minHeight: 49, backgroundColor: '#47785B', borderRadius: 12, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 9 }, disabled: { opacity: 0.75 }, primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' }, secondary: { minHeight: 46, borderWidth: 1, borderColor: '#DFE5D9', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }, secondaryText: { color: '#354A3B', fontSize: 13, fontWeight: '600' }, caption: { fontSize: 10, color: '#747E70', textAlign: 'center', lineHeight: 17 }, notice: { fontSize: 12, color: '#35523D', lineHeight: 19, padding: 12, backgroundColor: '#EDF3E7', borderRadius: 8 }, explanation: { fontSize: 13, color: '#35523D', lineHeight: 20, padding: 14, backgroundColor: '#EDF3E7', borderRadius: 10 }, pressed: { opacity: 0.7 },
   preferences: { paddingVertical: 24, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E5E8DF', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 18 }, modes: { flexDirection: 'row', backgroundColor: '#EEF1E8', borderRadius: 12, padding: 4, flexWrap: 'wrap' }, mode: { paddingHorizontal: 15, minHeight: 40, justifyContent: 'center', borderRadius: 9 }, active: { backgroundColor: '#FFFFFF', boxShadow: '0px 2px 4px rgba(0,0,0,0.06)' }, modeText: { fontSize: 12, color: '#6B7465' }, activeText: { color: '#275D43', fontWeight: '700' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12 }, example: { padding: 18, borderWidth: 1, borderColor: '#E2E7DA', borderRadius: 16, backgroundColor: '#FFFFFF', minHeight: 158 }, selected: { borderColor: '#568363', backgroundColor: '#F0F5E9' }, exampleIcon: { fontSize: 21, color: '#517750', marginBottom: 17, fontWeight: '600' }, exampleTitle: { fontSize: 14, fontWeight: '600', color: '#2B3B2B', marginBottom: 7 }, corner: { position: 'absolute', right: 16, top: 16, color: '#859477', fontSize: 19 },
   result: { marginTop: 24, borderRadius: 18, padding: 24, backgroundColor: '#EEF4E6', gap: 15 }, close: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }, question: { fontSize: 18, color: '#263D2D', fontWeight: '600', lineHeight: 27 }, answer: { fontSize: 15, color: '#40543C', lineHeight: 26 }, footer: { paddingVertical: 30 },
