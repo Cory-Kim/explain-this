@@ -14,10 +14,10 @@ app.use(express.json({ limit: '12mb' }));
 app.get('/health', (_request, response) => response.json({ ok: true, keyConfigured: Boolean(apiKey) }));
 app.post('/explain', async (request, response) => {
   if (!ai) return response.status(503).json({ error: 'The server has no Gemini key yet. Add it to server/.env.local.' });
-  const { imageBase64, mimeType = 'image/jpeg', mode = 'Simply' } = request.body ?? {};
+  const { imageBase64, mimeType = 'image/jpeg', mode = 'Simply', language = 'English' } = request.body ?? {};
   if (typeof imageBase64 !== 'string' || !imageBase64) return response.status(400).json({ error: 'Please provide an image.' });
   if (!['Simply', 'Step by step', 'Summary'].includes(mode)) return response.status(400).json({ error: 'Please choose a valid explanation style.' });
-  const prompt = mode === 'Step by step' ? 'Explain this image step by step in clear, beginner-friendly language. State uncertainty when something is unclear.' : mode === 'Summary' ? 'Summarize the important information in this image in a few concise bullet points. State uncertainty when something is unclear.' : 'Explain this image simply, as if helping a curious beginner. Define unfamiliar terms and state uncertainty when something is unclear.';
+  const prompt = (mode === 'Step by step' ? 'Explain this image step by step in clear, beginner-friendly language. State uncertainty when something is unclear.' : mode === 'Summary' ? 'Summarize the important information in this image in a few concise bullet points. State uncertainty when something is unclear.' : 'Explain this image simply, as if helping a curious beginner. Define unfamiliar terms and state uncertainty when something is unclear.') + ` Respond entirely in ${language}.`;
   try {
     const result = await ai.models.generateContent({ model: 'gemini-3.6-flash', contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: imageBase64 } }, { text: prompt }] }] });
     return response.json({ explanation: result.text || 'Gemini returned an empty explanation.' });
