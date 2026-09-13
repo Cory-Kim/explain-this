@@ -1,98 +1,72 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+const modes = ['Simply', 'Step by step', 'Summary'] as const;
+const examples = [
+  { icon: '>_', title: 'An error message', detail: 'Understand what went wrong', question: 'Cannot read properties of undefined', answers: ['Your code tried to read a value from something that does not exist yet. Check that the data has loaded before using it.', '1. Find the line mentioned in the error.\n2. Check which value is undefined.\n3. Handle missing data before reading its properties.', 'Check that your data exists before accessing it.'] },
+  { icon: 'x²', title: 'A math problem', detail: 'Make the steps make sense', question: '2x + 6 = 14', answers: ['Subtract 6 from both sides to get 2x = 8. Divide both sides by 2, and you get x = 4.', '1. Start with 2x + 6 = 14.\n2. Subtract 6: 2x = 8.\n3. Divide by 2: x = 4.\n4. Check: 2(4) + 6 = 14.', 'x = 4'] },
+  { icon: 'Aa', title: 'A product label', detail: 'Get past unfamiliar words', question: 'Ingredients: oats, almonds, sunflower oil', answers: ['Oats are a grain, almonds are tree nuts, and sunflower oil is a plant oil. This sample contains almonds, which matter for people with a tree nut allergy.', '1. Oats: a grain ingredient.\n2. Almonds: a tree nut ingredient.\n3. Sunflower oil: oil made from sunflower seeds.', 'A sample containing grain, tree nuts, and plant oil.'] },
+  { icon: '≡', title: 'A document', detail: 'Find the important parts', question: 'Return borrowed laptops at the library desk before closing at 6 pm on Friday.', answers: ['If you borrowed a library laptop, bring it back to the desk before 6 pm on Friday.', '1. Check whether you have a borrowed laptop.\n2. Take it to the library desk.\n3. Return it before 6 pm on Friday.', 'Return library laptops before Friday at 6 pm.'] },
+];
 
 export default function HomeScreen() {
+  const wide = useWindowDimensions().width >= 850;
+  const [mode, setMode] = useState(0);
+  const [sample, setSample] = useState<number | null>(null);
+  const [notice, setNotice] = useState('');
+  const current = sample === null ? null : examples[sample];
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+    <SafeAreaView style={s.page}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        <View style={s.shell}>
+          <View style={s.header}>
+            <View style={s.brand}><View style={s.logo}><Text style={s.logoText}>✳</Text></View><Text style={s.brandText}>Explain This<Text style={s.green}>.</Text></Text></View>
+            <Text style={s.tag}>●  A little more clarity</Text>
+          </View>
+          <View style={[s.hero, wide && s.heroWide]}>
+            <View style={s.intro}>
+              <Text style={s.eyebrow}>FOR YOUR EVERYDAY “WHAT DOES THIS MEAN?”</Text>
+              <Text style={[s.heading, !wide && s.headingSmall]}>Less confusion.{'\n'}<Text style={s.green}>More understanding.</Text></Text>
+              <Text style={s.subtitle}>A tricky question. An unfamiliar label. Something that just doesn’t click. Let’s make sense of it.</Text>
+              <Text style={s.steps}>01  Capture     →     02  Ask     →     03  Understand</Text>
+            </View>
+            <View style={[s.capture, wide && { width: 420 }]}>
+              <View style={s.row}><Text style={s.sectionTitle}>Start with a picture</Text><Text style={s.star}>✳</Text></View>
+              <View style={s.imageArea}>
+                <View style={s.picture}><View style={s.sun}/><View style={s.mountain}/></View>
+                <Text style={s.uploadTitle}>A little curiosity goes a long way</Text>
+                <Text style={[s.hint, { textAlign: 'center' }]}>A photo or screenshot is a good place to start.</Text>
+              </View>
+              <Pressable accessibilityRole="button" onPress={() => setNotice('Photo uploads are coming next. Try an interactive example below to explore the experience.')} style={({ pressed }) => [s.primary, pressed && s.pressed]}><Text style={s.primaryText}>＋  Choose an image</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => setNotice('Camera capture is coming next. This first version previews the design and sample explanations.')} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Take a photo</Text></Pressable>
+              <Text style={s.caption}>Design preview · No photos are uploaded yet</Text>
+              {!!notice && <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text>}
+            </View>
+          </View>
+          <View style={s.preferences}>
+            <View><Text style={s.sectionTitle}>Your explanation, your way</Text><Text style={s.hint}>Choose how you like to learn.</Text></View>
+            <View style={s.modes}>{modes.map((item, index) => <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: mode === index }} onPress={() => setMode(index)} style={[s.mode, mode === index && s.active]}><Text style={[s.modeText, mode === index && s.activeText]}>{item}</Text></Pressable>)}</View>
+          </View>
+          <View style={[s.row, { marginTop: 30, marginBottom: 16 }]}><Text style={s.sectionTitle}>What are you curious about?</Text><Text style={s.hint}>Try an example ↓</Text></View>
+          <View style={s.grid}>{examples.map((item, index) => <Pressable key={item.title} accessibilityRole="button" accessibilityState={{ selected: sample === index }} onPress={() => { setSample(index); setNotice(''); }} style={({ pressed }) => [s.example, { width: wide ? '23.5%' : '48%' }, sample === index && s.selected, pressed && s.pressed]}><Text style={s.exampleIcon}>{item.icon}</Text><Text style={s.exampleTitle}>{item.title}</Text><Text style={s.hint}>{item.detail}</Text><Text style={s.corner}>↗</Text></Pressable>)}</View>
+          {current && <View style={s.result} accessibilityLiveRegion="polite"><View style={s.row}><Text style={s.eyebrow}>SAMPLE EXPLANATION · {modes[mode].toUpperCase()}</Text><Pressable accessibilityRole="button" accessibilityLabel="Close sample" onPress={() => setSample(null)} style={s.close}><Text>✕</Text></Pressable></View><Text style={s.question}>{current.question}</Text><Text style={s.answer}>{current.answers[mode]}</Text><Text style={s.caption}>Written example to preview the experience. AI is not connected yet.</Text></View>}
+          <View style={[s.row, s.footer]}><Text style={s.hint}>A clearer picture starts here.</Text><Text style={s.caption}>Explain This · Made for curious minds</Text></View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
+// Styles control the spacing, colors, and layout of the screen above.
+const s = StyleSheet.create({
+  page: { flex: 1, backgroundColor: '#FAFBF7' }, shell: { width: '100%', maxWidth: 1160, alignSelf: 'center', paddingHorizontal: 24 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 26, gap: 16, flexWrap: 'wrap', borderBottomWidth: 1, borderBottomColor: '#E5E8DF' },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 10 }, logo: { width: 38, height: 38, backgroundColor: '#225C46', borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, logoText: { fontSize: 29, color: '#DFF2BB' }, brandText: { fontSize: 23, fontWeight: '700', color: '#202D26', letterSpacing: -0.8 }, tag: { fontSize: 12, color: '#667264' },
+  hero: { paddingVertical: 40, gap: 30 }, heroWide: { flexDirection: 'row', alignItems: 'center', gap: 48, paddingVertical: 56 }, intro: { flex: 1, gap: 22 }, eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, color: '#52715B', lineHeight: 18 }, heading: { fontSize: 52, fontWeight: '700', letterSpacing: -2.5, lineHeight: 61, color: '#202D26' }, headingSmall: { fontSize: 38, lineHeight: 46, letterSpacing: -1.7 }, green: { color: '#47785B' }, subtitle: { fontSize: 17, lineHeight: 28, color: '#687166', maxWidth: 440 }, steps: { fontSize: 11, color: '#485A4C', lineHeight: 22, fontWeight: '600', paddingTop: 8 },
+  capture: { padding: 24, borderRadius: 24, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DEE5D8', gap: 12, boxShadow: '0px 12px 40px rgba(36,65,34,0.05)' }, row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }, sectionTitle: { fontSize: 17, fontWeight: '600', color: '#263D2D', marginBottom: 4 }, star: { fontSize: 25, color: '#658E65' }, imageArea: { alignItems: 'center', paddingHorizontal: 12, paddingVertical: 26, backgroundColor: '#F5F7EF', borderRadius: 16, marginVertical: 4, borderWidth: 1, borderColor: '#E4E9D9', borderStyle: 'dashed', gap: 9 }, picture: { width: 66, height: 53, borderWidth: 2, borderColor: '#6F8A5B', borderRadius: 10, overflow: 'hidden', marginBottom: 10, transform: [{ rotate: '-7deg' }], backgroundColor: '#E9EFD9' }, sun: { width: 10, height: 10, backgroundColor: '#789354', borderRadius: 5, margin: 9 }, mountain: { width: 47, height: 47, backgroundColor: '#BDCDA3', transform: [{ rotate: '45deg' }], left: 17 }, uploadTitle: { fontSize: 13, fontWeight: '600', color: '#405039', textAlign: 'center' }, hint: { color: '#6C7569', fontSize: 12, lineHeight: 20 },
+  primary: { minHeight: 49, backgroundColor: '#245D46', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }, primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' }, secondary: { minHeight: 46, borderWidth: 1, borderColor: '#DFE5D9', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }, secondaryText: { color: '#354A3B', fontSize: 13, fontWeight: '600' }, caption: { fontSize: 10, color: '#747E70', textAlign: 'center', lineHeight: 17 }, notice: { fontSize: 12, color: '#35523D', lineHeight: 19, padding: 12, backgroundColor: '#EDF3E7', borderRadius: 8 }, pressed: { opacity: 0.7 },
+  preferences: { paddingVertical: 24, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E5E8DF', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 18 }, modes: { flexDirection: 'row', backgroundColor: '#EEF1E8', borderRadius: 12, padding: 4, flexWrap: 'wrap' }, mode: { paddingHorizontal: 15, minHeight: 40, justifyContent: 'center', borderRadius: 9 }, active: { backgroundColor: '#FFFFFF', boxShadow: '0px 2px 4px rgba(0,0,0,0.06)' }, modeText: { fontSize: 12, color: '#6B7465' }, activeText: { color: '#275D43', fontWeight: '700' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12 }, example: { padding: 18, borderWidth: 1, borderColor: '#E2E7DA', borderRadius: 16, backgroundColor: '#FFFFFF', minHeight: 158 }, selected: { borderColor: '#568363', backgroundColor: '#F0F5E9' }, exampleIcon: { fontSize: 21, color: '#517750', marginBottom: 17, fontWeight: '600' }, exampleTitle: { fontSize: 14, fontWeight: '600', color: '#2B3B2B', marginBottom: 7 }, corner: { position: 'absolute', right: 16, top: 16, color: '#859477', fontSize: 19 },
+  result: { marginTop: 24, borderRadius: 18, padding: 24, backgroundColor: '#EEF4E6', gap: 15 }, close: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }, question: { fontSize: 18, color: '#263D2D', fontWeight: '600', lineHeight: 27 }, answer: { fontSize: 15, color: '#40543C', lineHeight: 26 }, footer: { paddingVertical: 30 },
 });
