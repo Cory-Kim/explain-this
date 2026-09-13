@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const modes = ['Simply', 'Step by step', 'Summary'] as const;
@@ -15,7 +16,42 @@ export default function HomeScreen() {
   const [mode, setMode] = useState(0);
   const [sample, setSample] = useState<number | null>(null);
   const [notice, setNotice] = useState('');
+  const [image, setImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [previewError, setPreviewError] = useState(false);
   const current = sample === null ? null : examples[sample];
+
+  async function chooseImage() {
+    setNotice('');
+    try {
+      // Call directly from the button so browsers allow the system picker.
+      // Image-only library selection does not require broad library access.
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: false,
+        allowsEditing: false,
+        quality: 1,
+      });
+      // Keep the current picture if the user cancels replacement.
+      if (result.canceled) return;
+      const selected = result.assets?.[0];
+      if (!selected?.uri || (selected.type && selected.type !== 'image') ||
+          (selected.mimeType && !selected.mimeType.startsWith('image/'))) {
+        setNotice('Please choose an image file, such as a JPG or PNG.');
+        return;
+      }
+      setImage(selected);
+      setPreviewError(false);
+      setSample(null);
+    } catch {
+      setNotice('We couldn’t open that image. Please try again or choose a different picture.');
+    }
+  }
+
+  function removeImage() {
+    setImage(null);
+    setPreviewError(false);
+    setNotice('');
+  }
   return (
     <SafeAreaView style={s.page}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
@@ -34,13 +70,27 @@ export default function HomeScreen() {
             <View style={[s.capture, wide && { width: 420 }]}>
               <View style={s.row}><Text style={s.sectionTitle}>Start with a picture</Text><Text style={s.star}>✳</Text></View>
               <View style={s.imageArea}>
+                {image ? <>
+                  {!previewError ? <Image
+                    key={image.uri}
+                    source={{ uri: image.uri }}
+                    style={s.preview}
+                    resizeMode="contain"
+                    accessibilityLabel="Selected image preview"
+                    onError={() => setPreviewError(true)}
+                  /> : <Text accessibilityLiveRegion="polite" style={s.notice}>This image can’t be previewed. Try a JPG or PNG instead.</Text>}
+                  <Text numberOfLines={2} style={s.uploadTitle}>{image.fileName || 'Selected image'}</Text>
+                  <Text style={s.hint}>Selected on your device · Not uploaded</Text>
+                </> : <>
                 <View style={s.picture}><View style={s.sun}/><View style={s.mountain}/></View>
                 <Text style={s.uploadTitle}>A little curiosity goes a long way</Text>
                 <Text style={[s.hint, { textAlign: 'center' }]}>A photo or screenshot is a good place to start.</Text>
+                </>}
               </View>
-              <Pressable accessibilityRole="button" onPress={() => setNotice('Photo uploads are coming next. Try an interactive example below to explore the experience.')} style={({ pressed }) => [s.primary, pressed && s.pressed]}><Text style={s.primaryText}>＋  Choose an image</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={chooseImage} style={({ pressed }) => [s.primary, pressed && s.pressed]}><Text style={s.primaryText}>{image ? 'Replace image' : '＋  Choose an image'}</Text></Pressable>
+              {image && <Pressable accessibilityRole="button" onPress={removeImage} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Remove image</Text></Pressable>}
               <Pressable accessibilityRole="button" onPress={() => setNotice('Camera capture is coming next. This first version previews the design and sample explanations.')} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Take a photo</Text></Pressable>
-              <Text style={s.caption}>Design preview · No photos are uploaded yet</Text>
+              <Text style={s.caption}>{image ? 'Preview only · AI explanations are coming next' : 'Your image stays on your device until AI is connected'}</Text>
               {!!notice && <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text>}
             </View>
           </View>
@@ -60,6 +110,7 @@ export default function HomeScreen() {
 
 // Styles control the spacing, colors, and layout of the screen above.
 const s = StyleSheet.create({
+  preview: { width: '100%', height: 220, borderRadius: 8 },
   page: { flex: 1, backgroundColor: '#FAFBF7' }, shell: { width: '100%', maxWidth: 1160, alignSelf: 'center', paddingHorizontal: 24 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 26, gap: 16, flexWrap: 'wrap', borderBottomWidth: 1, borderBottomColor: '#E5E8DF' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10 }, logo: { width: 38, height: 38, backgroundColor: '#225C46', borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, logoText: { fontSize: 29, color: '#DFF2BB' }, brandText: { fontSize: 23, fontWeight: '700', color: '#202D26', letterSpacing: -0.8 }, tag: { fontSize: 12, color: '#667264' },

@@ -24,6 +24,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a photo to preview in Explain This.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "expo-router",
       [
         "expo-splash-screen",
