@@ -1,0 +1,25 @@
+{
+  "name": "explain-this",
+  "main": "index.mjs",
+  "compatibility_date": "2026-09-12",
+  "workers_dev": true,
+  "vars": {
+    "GEMINI_MODEL": "gemini-3.6-flash",
+    "DEVICE_DAILY_LIMIT": "5",
+    "GLOBAL_DAILY_LIMIT": "20",
+    "GLOBAL_MINUTE_LIMIT": "5"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "explain-this-usage",
+      "database_id": "1f8da015-a5a9-4f9e-993b-30c4ee27ba81",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "0 1 * * *"
+    ]
+  }
+}

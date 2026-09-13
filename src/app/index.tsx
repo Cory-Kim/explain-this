@@ -1,11 +1,12 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SavedHistory } from '@/components/saved-history';
 import { historyStorage } from '@/lib/history-storage';
 import { createHistoryThumbnail } from '@/lib/history-thumbnail';
 import type { FollowUp, HistoryEntry } from '@/lib/history-model';
+import { api, prepareImage, type Usage } from '@/lib/api';
 
 const modes = ['Simply', 'Step by step', 'Summary'] as const;
 const languages = ['English', '한국어', '日本語', 'Español', 'Français'] as const;
@@ -37,6 +38,7 @@ export default function HomeScreen() {
   const [historyError, setHistoryError] = useState('');
   const [historyBusy, setHistoryBusy] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
+  const [usage, setUsage] = useState<Usage | null>(null);
   const activeEntry = useRef<HistoryEntry | null>(null);
   const generation = useRef(0);
   const requestBusy = useRef(false);
@@ -51,6 +53,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     void loadHistory();
+    void api('/usage', undefined, setUsage).catch(() => {});
     return () => { generation.current += 1; };
   }, []);
 
@@ -148,7 +151,7 @@ export default function HomeScreen() {
 
   async function explainImage() {
     if (!image || requestBusy.current || historyLoading) return;
-    if (requestCount >= FREE_REQUESTS) { setNotice(`You’ve used all ${FREE_REQUESTS} free requests in this session. Please try again later.`); return; }
+    if (usage && usage.remaining <= 0) { setNotice(`Your daily allowance is used. It resets at ${new Date(usage.resetsAt).toLocaleString()}.`); return; }
     if (!image.base64) { setNotice('This image could not be prepared. Please choose it again.'); return; }
     resetConversation();
     const startedGeneration = generation.current;
@@ -157,11 +160,9 @@ export default function HomeScreen() {
     const selectedLanguage = languages[language];
     requestBusy.current = true;
     setNotice(''); setExplaining(true);
-    const serverUrl = Platform.OS === 'web' ? 'http://localhost:8787' : 'http://192.168.1.66:8787';
     try {
-      const response = await fetch(`${serverUrl}/explain`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageBase64: image.base64, mimeType: image.mimeType || 'image/jpeg', mode: modes[mode], language: languages[language] }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Request failed');
+      const prepared = await prepareImage(selectedImage);
+      const data = await api('/explain', { ...prepared, mode: selectedMode, language: selectedLanguage }, setUsage);
       if (typeof data.explanation !== 'string' || !data.explanation.trim()) throw new Error('No explanation was returned. Please try again.');
       setRequestCount(count => count + 1);
       if (generation.current !== startedGeneration) return;
@@ -187,17 +188,15 @@ export default function HomeScreen() {
 
   async function askFollowUp() {
     if (!image?.base64 || !explanation || !question.trim() || requestBusy.current) return;
-    if (requestCount >= FREE_REQUESTS) { setNotice(`You’ve used all ${FREE_REQUESTS} free requests in this session. Please try again later.`); return; }
+    if (usage && usage.remaining <= 0) { setNotice(`Your daily allowance is used. It resets at ${new Date(usage.resetsAt).toLocaleString()}.`); return; }
     const askedQuestion = question.trim();
     const answerLanguage = languages[language];
     const startedGeneration = generation.current;
     requestBusy.current = true;
     setAsking(true); setNotice('');
-    const serverUrl = Platform.OS === 'web' ? 'http://localhost:8787' : 'http://192.168.1.66:8787';
     try {
-      const response = await fetch(`${serverUrl}/follow-up`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageBase64: image.base64, mimeType: image.mimeType || 'image/jpeg', question: question.trim(), language: languages[language], previousExplanation: explanation }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Request failed');
+      const prepared = await prepareImage(image);
+      const data = await api('/follow-up', { ...prepared, question: askedQuestion, language: answerLanguage, previousExplanation: explanation }, setUsage);
       if (typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('No answer was returned. Please try again.');
       setRequestCount(count => count + 1);
       if (generation.current !== startedGeneration) return;
