@@ -1,7 +1,11 @@
-import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { SavedHistory } from '@/components/saved-history';
+import { historyStorage } from '@/lib/history-storage';
+import { createHistoryThumbnail } from '@/lib/history-thumbnail';
+import type { FollowUp, HistoryEntry } from '@/lib/history-model';
 
 const modes = ['Simply', 'Step by step', 'Summary'] as const;
 const languages = ['English', '한국어', '日本語', 'Español', 'Français'] as const;
@@ -25,10 +29,64 @@ export default function HomeScreen() {
   const [explaining, setExplaining] = useState(false);
   const [explanation, setExplanation] = useState('');
   const [question, setQuestion] = useState('');
-  const [followUp, setFollowUp] = useState('');
+  const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [asking, setAsking] = useState(false);
   const [requestCount, setRequestCount] = useState(0);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState('');
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('');
+  const activeEntry = useRef<HistoryEntry | null>(null);
+  const generation = useRef(0);
+  const requestBusy = useRef(false);
   const current = sample === null ? null : examples[sample];
+
+  async function loadHistory() {
+    setHistoryLoading(true);
+    try { setHistory(await historyStorage.load()); setHistoryError(''); }
+    catch { setHistoryError('Couldn’t read saved history. Retry, or delete all history to start fresh.'); }
+    finally { setHistoryLoading(false); }
+  }
+
+  useEffect(() => {
+    void loadHistory();
+    return () => { generation.current += 1; };
+  }, []);
+
+  function resetConversation() {
+    generation.current += 1;
+    activeEntry.current = null;
+    setExplanation(''); setFollowUps([]); setQuestion(''); setSaveStatus('');
+  }
+
+  async function persistEntry(entry: HistoryEntry) {
+    setHistoryBusy(true);
+    try {
+      const entries = await historyStorage.save(entry);
+      setHistory(entries); setHistoryError('');
+      if (activeEntry.current?.id === entry.id) setSaveStatus('Saved on this device');
+    } catch {
+      setHistoryError('Couldn’t save this conversation. Your answer is still on screen. Free some device storage and retry saving.');
+      if (activeEntry.current?.id === entry.id) setSaveStatus('Not saved');
+    } finally { setHistoryBusy(false); }
+  }
+
+  async function deleteHistory(id?: string) {
+    setHistoryBusy(true);
+    try {
+      const entries = id ? await historyStorage.remove(id) : await historyStorage.clear();
+      setHistory(entries); setHistoryError('');
+      if (!id || activeEntry.current?.id === id) {
+        // Detach the open conversation so later follow-ups cannot recreate a deleted record.
+        activeEntry.current = null;
+        setSaveStatus('Removed from saved history');
+      }
+    } catch {
+      setHistoryError('Couldn’t delete history. Please try again.');
+      throw new Error('History deletion failed');
+    } finally { setHistoryBusy(false); }
+  }
 
   async function chooseImage() {
     setNotice('');
@@ -51,6 +109,7 @@ export default function HomeScreen() {
         return;
       }
       setImage(selected);
+      resetConversation();
       setPreviewError(false);
       setSample(null);
     } catch {
@@ -71,6 +130,7 @@ export default function HomeScreen() {
       const selected = result.assets?.[0];
       if (!selected?.uri) { setNotice('We couldn’t use that photo. Please try again.'); return; }
       setImage(selected);
+      resetConversation();
       setPreviewError(false);
       setSample(null);
     } catch {
@@ -79,6 +139,7 @@ export default function HomeScreen() {
   }
 
   function removeImage() {
+    resetConversation();
     setImage(null);
     setPreviewError(false);
     setExplanation('');
@@ -86,39 +147,73 @@ export default function HomeScreen() {
   }
 
   async function explainImage() {
-    if (!image || explaining) return;
+    if (!image || requestBusy.current || historyLoading) return;
     if (requestCount >= FREE_REQUESTS) { setNotice(`You’ve used all ${FREE_REQUESTS} free requests in this session. Please try again later.`); return; }
     if (!image.base64) { setNotice('This image could not be prepared. Please choose it again.'); return; }
-    setExplanation(''); setNotice(''); setExplaining(true);
+    resetConversation();
+    const startedGeneration = generation.current;
+    const selectedImage = image;
+    const selectedMode = modes[mode];
+    const selectedLanguage = languages[language];
+    requestBusy.current = true;
+    setNotice(''); setExplaining(true);
     const serverUrl = Platform.OS === 'web' ? 'http://localhost:8787' : 'http://192.168.1.66:8787';
     try {
       const response = await fetch(`${serverUrl}/explain`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageBase64: image.base64, mimeType: image.mimeType || 'image/jpeg', mode: modes[mode], language: languages[language] }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Request failed');
-      setExplanation(data.explanation);
+      if (typeof data.explanation !== 'string' || !data.explanation.trim()) throw new Error('No explanation was returned. Please try again.');
       setRequestCount(count => count + 1);
-      setFollowUp('');
+      if (generation.current !== startedGeneration) return;
+      setExplanation(data.explanation);
+      setSaveStatus('Saving on this device…');
+      let thumbnail: string | null = null;
+      try { thumbnail = await createHistoryThumbnail(selectedImage); }
+      catch { setNotice('The explanation can be saved, but its image preview could not be created.'); }
+      if (generation.current !== startedGeneration) return;
+      const entry: HistoryEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        createdAt: new Date().toISOString(),
+        title: selectedImage.fileName || 'Camera photo', thumbnail,
+        mode: selectedMode, language: selectedLanguage,
+        explanation: data.explanation, followUps: [],
+      };
+      activeEntry.current = entry;
+      await persistEntry(entry);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'We couldn’t get an explanation. Please try again.');
-    } finally { setExplaining(false); }
+      if (generation.current === startedGeneration) setNotice(error instanceof Error ? error.message : 'We couldn’t get an explanation. Please try again.');
+    } finally { requestBusy.current = false; setExplaining(false); }
   }
 
   async function askFollowUp() {
-    if (!image?.base64 || !question.trim() || asking) return;
+    if (!image?.base64 || !explanation || !question.trim() || requestBusy.current) return;
     if (requestCount >= FREE_REQUESTS) { setNotice(`You’ve used all ${FREE_REQUESTS} free requests in this session. Please try again later.`); return; }
+    const askedQuestion = question.trim();
+    const answerLanguage = languages[language];
+    const startedGeneration = generation.current;
+    requestBusy.current = true;
     setAsking(true); setNotice('');
     const serverUrl = Platform.OS === 'web' ? 'http://localhost:8787' : 'http://192.168.1.66:8787';
     try {
       const response = await fetch(`${serverUrl}/follow-up`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageBase64: image.base64, mimeType: image.mimeType || 'image/jpeg', question: question.trim(), language: languages[language], previousExplanation: explanation }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Request failed');
-      setFollowUp(data.answer); setQuestion(''); setRequestCount(count => count + 1);
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'We couldn’t answer that question. Please try again.'); }
-    finally { setAsking(false); }
+      if (typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('No answer was returned. Please try again.');
+      setRequestCount(count => count + 1);
+      if (generation.current !== startedGeneration) return;
+      const turn: FollowUp = { question: askedQuestion, answer: data.answer, language: answerLanguage, createdAt: new Date().toISOString() };
+      setFollowUps(turns => [...turns, turn]); setQuestion('');
+      if (activeEntry.current) {
+        const entry = { ...activeEntry.current, followUps: [...activeEntry.current.followUps, turn] };
+        activeEntry.current = entry;
+        await persistEntry(entry);
+      }
+    } catch (error) { if (generation.current === startedGeneration) setNotice(error instanceof Error ? error.message : 'We couldn’t answer that question. Please try again.'); }
+    finally { requestBusy.current = false; setAsking(false); }
   }
   return (
     <SafeAreaView style={s.page}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1 }}>
         <View style={s.shell}>
           <View style={s.header}>
             <View style={s.brand}><View style={s.logo}><Text style={s.logoText}>✳</Text></View><Text style={s.brandText}>Explain This<Text style={s.green}>.</Text></Text></View>
@@ -144,7 +239,7 @@ export default function HomeScreen() {
                     onError={() => setPreviewError(true)}
                   /> : <Text accessibilityLiveRegion="polite" style={s.notice}>This image can’t be previewed. Try a JPG or PNG instead.</Text>}
                   <Text numberOfLines={2} style={s.uploadTitle}>{image.fileName || 'Selected image'}</Text>
-                  <Text style={s.hint}>Selected on your device · Not uploaded</Text>
+                  <Text style={s.hint}>Sent to Gemini when you ask for an explanation</Text>
                 </> : <>
                 <View style={s.picture}><View style={s.sun}/><View style={s.mountain}/></View>
                 <Text style={s.uploadTitle}>A little curiosity goes a long way</Text>
@@ -153,12 +248,19 @@ export default function HomeScreen() {
               </View>
               <Pressable accessibilityRole="button" onPress={chooseImage} style={({ pressed }) => [s.primary, pressed && s.pressed]}><Text style={s.primaryText}>{image ? 'Replace image' : '＋  Choose an image'}</Text></Pressable>
               {image && <Pressable accessibilityRole="button" onPress={removeImage} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Remove image</Text></Pressable>}
-              {image && <Pressable accessibilityRole="button" disabled={explaining} onPress={explainImage} style={({ pressed }) => [s.explain, pressed && s.pressed, explaining && s.disabled]}>{explaining ? <><ActivityIndicator color="#FFFFFF" size="small" /><Text style={s.primaryText}>Preparing explanation…</Text></> : <Text style={s.primaryText}>✦  Explain this image</Text>}</Pressable>}
+              {image && <Pressable accessibilityRole="button" disabled={explaining || asking || historyLoading} onPress={explainImage} style={({ pressed }) => [s.explain, pressed && s.pressed, (explaining || asking || historyLoading) && s.disabled]}>{explaining ? <><ActivityIndicator color="#FFFFFF" size="small" /><Text style={s.primaryText}>Preparing explanation…</Text></> : <Text style={s.primaryText}>✦  Explain this image</Text>}</Pressable>}
               <Pressable accessibilityRole="button" onPress={takePhoto} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Take a photo</Text></Pressable>
-              <Text style={s.caption}>{image ? `${FREE_REQUESTS - requestCount} free requests remaining in this session` : 'Your image stays on your device until AI is connected'}</Text>
+              <Text style={s.caption}>{image ? `${Math.max(0, FREE_REQUESTS - requestCount)} free requests remaining in this session` : 'Choose a picture to get started'}</Text>
               {!!notice && <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text>}
               {!!explanation && <Text accessibilityLiveRegion="polite" style={s.explanation}>{explanation}</Text>}
-              {!!explanation && <View style={s.followUp}><Text style={s.followTitle}>Still curious?</Text><TextInput value={question} onChangeText={setQuestion} placeholder="Ask a follow-up about this image…" placeholderTextColor="#889386" multiline style={s.questionInput} /><Pressable accessibilityRole="button" disabled={asking || !question.trim()} onPress={askFollowUp} style={({ pressed }) => [s.askButton, pressed && s.pressed, (asking || !question.trim()) && s.disabled]}>{asking ? <><ActivityIndicator color="#FFFFFF" size="small" /><Text style={s.primaryText}>Thinking…</Text></> : <Text style={s.primaryText}>Ask follow-up</Text>}</Pressable>{!!followUp && <View style={s.followAnswer}><Text style={s.answerLabel}>FOLLOW-UP ANSWER</Text><Text style={s.answer}>{followUp}</Text></View>}</View>}
+              {!!saveStatus && <Text accessibilityLiveRegion="polite" style={s.caption}>{saveStatus}</Text>}
+              {saveStatus === 'Not saved' && <Pressable accessibilityRole="button" disabled={historyBusy} style={s.secondary} onPress={() => { if (activeEntry.current) void persistEntry(activeEntry.current); }}><Text style={s.secondaryText}>Retry saving</Text></Pressable>}
+              {!!explanation && <View style={s.followUp}>
+                <Text style={s.followTitle}>Still curious?</Text>
+                {followUps.map((turn, index) => <View key={`${turn.createdAt}-${index}`} style={s.followAnswer}><Text style={s.answerLabel}>YOU ASKED · {turn.language}</Text><Text selectable style={s.question}>{turn.question}</Text><Text selectable style={s.answer}>{turn.answer}</Text></View>)}
+                <TextInput accessibilityLabel="Follow-up question" value={question} onChangeText={setQuestion} editable={!asking} placeholder="Ask a follow-up about this image…" placeholderTextColor="#889386" multiline style={s.questionInput} />
+                <Pressable accessibilityRole="button" disabled={asking || explaining || !question.trim()} onPress={askFollowUp} style={({ pressed }) => [s.askButton, pressed && s.pressed, (asking || explaining || !question.trim()) && s.disabled]}>{asking ? <><ActivityIndicator color="#FFFFFF" size="small" /><Text style={s.primaryText}>Thinking…</Text></> : <Text style={s.primaryText}>Ask follow-up</Text>}</Pressable>
+              </View>}
             </View>
           </View>
           <View style={s.preferences}>
@@ -168,6 +270,7 @@ export default function HomeScreen() {
           <View style={[s.row, { marginTop: 30, marginBottom: 16 }]}><Text style={s.sectionTitle}>What are you curious about?</Text><Text style={s.hint}>Try an example ↓</Text></View>
           <View style={s.grid}>{examples.map((item, index) => <Pressable key={item.title} accessibilityRole="button" accessibilityState={{ selected: sample === index }} onPress={() => { setSample(index); setNotice(''); }} style={({ pressed }) => [s.example, { width: wide ? '23.5%' : '48%' }, sample === index && s.selected, pressed && s.pressed]}><Text style={s.exampleIcon}>{item.icon}</Text><Text style={s.exampleTitle}>{item.title}</Text><Text style={s.hint}>{item.detail}</Text><Text style={s.corner}>↗</Text></Pressable>)}</View>
           {current && <View style={s.result} accessibilityLiveRegion="polite"><View style={s.row}><Text style={s.eyebrow}>SAMPLE EXPLANATION · {modes[mode].toUpperCase()}</Text><Pressable accessibilityRole="button" accessibilityLabel="Close sample" onPress={() => setSample(null)} style={s.close}><Text>✕</Text></Pressable></View><Text style={s.question}>{current.question}</Text><Text style={s.answer}>{current.answers[mode]}</Text><Text style={s.caption}>Written example to preview the experience. AI is not connected yet.</Text></View>}
+          <SavedHistory entries={history} loading={historyLoading} error={historyError} busy={historyBusy || explaining || asking} onDelete={deleteHistory} onClear={() => deleteHistory()} onRetry={() => { void loadHistory(); }} />
           <View style={[s.row, s.footer]}><Text style={s.hint}>A clearer picture starts here.</Text><Text style={s.caption}>Explain This · Made for curious minds</Text></View>
         </View>
       </ScrollView>
