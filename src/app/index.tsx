@@ -47,6 +47,26 @@ export default function HomeScreen() {
     }
   }
 
+  async function takePhoto() {
+    setNotice('');
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setNotice('Camera permission is needed to take a photo. You can allow it in the tablet settings.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 1 });
+      if (result.canceled) return;
+      const selected = result.assets?.[0];
+      if (!selected?.uri) { setNotice('We couldn’t use that photo. Please try again.'); return; }
+      setImage(selected);
+      setPreviewError(false);
+      setSample(null);
+    } catch {
+      setNotice('We couldn’t open the camera. Please try again.');
+    }
+  }
+
   function removeImage() {
     setImage(null);
     setPreviewError(false);
@@ -89,7 +109,7 @@ export default function HomeScreen() {
               </View>
               <Pressable accessibilityRole="button" onPress={chooseImage} style={({ pressed }) => [s.primary, pressed && s.pressed]}><Text style={s.primaryText}>{image ? 'Replace image' : '＋  Choose an image'}</Text></Pressable>
               {image && <Pressable accessibilityRole="button" onPress={removeImage} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Remove image</Text></Pressable>}
-              <Pressable accessibilityRole="button" onPress={() => setNotice('Camera capture is coming next. This first version previews the design and sample explanations.')} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Take a photo</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={takePhoto} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Take a photo</Text></Pressable>
               <Text style={s.caption}>{image ? 'Preview only · AI explanations are coming next' : 'Your image stays on your device until AI is connected'}</Text>
               {!!notice && <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text>}
             </View>

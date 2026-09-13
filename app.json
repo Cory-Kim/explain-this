@@ -28,7 +28,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Choose a photo to preview in Explain This.",
-          "cameraPermission": false,
+          "cameraPermission": "Allow Explain This to use the camera to explain your photos.",
           "microphonePermission": false
         }
       ],
