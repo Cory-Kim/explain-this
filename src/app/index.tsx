@@ -10,7 +10,6 @@ import { api, prepareImage, type Usage } from '@/lib/api';
 
 const modes = ['Simply', 'Step by step', 'Summary'] as const;
 const languages = ['English', '한국어', '日本語', 'Español', 'Français'] as const;
-const FREE_REQUESTS = 5;
 const examples = [
   { icon: '>_', title: 'An error message', detail: 'Understand what went wrong', question: 'Cannot read properties of undefined', answers: ['Your code tried to read a value from something that does not exist yet. Check that the data has loaded before using it.', '1. Find the line mentioned in the error.\n2. Check which value is undefined.\n3. Handle missing data before reading its properties.', 'Check that your data exists before accessing it.'] },
   { icon: 'x²', title: 'A math problem', detail: 'Make the steps make sense', question: '2x + 6 = 14', answers: ['Subtract 6 from both sides to get 2x = 8. Divide both sides by 2, and you get x = 4.', '1. Start with 2x + 6 = 14.\n2. Subtract 6: 2x = 8.\n3. Divide by 2: x = 4.\n4. Check: 2(4) + 6 = 14.', 'x = 4'] },
@@ -32,7 +31,6 @@ export default function HomeScreen() {
   const [question, setQuestion] = useState('');
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [asking, setAsking] = useState(false);
-  const [requestCount, setRequestCount] = useState(0);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState('');
@@ -164,7 +162,6 @@ export default function HomeScreen() {
       const prepared = await prepareImage(selectedImage);
       const data = await api('/explain', { ...prepared, mode: selectedMode, language: selectedLanguage }, setUsage);
       if (typeof data.explanation !== 'string' || !data.explanation.trim()) throw new Error('No explanation was returned. Please try again.');
-      setRequestCount(count => count + 1);
       if (generation.current !== startedGeneration) return;
       setExplanation(data.explanation);
       setSaveStatus('Saving on this device…');
@@ -198,7 +195,6 @@ export default function HomeScreen() {
       const prepared = await prepareImage(image);
       const data = await api('/follow-up', { ...prepared, question: askedQuestion, language: answerLanguage, previousExplanation: explanation }, setUsage);
       if (typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('No answer was returned. Please try again.');
-      setRequestCount(count => count + 1);
       if (generation.current !== startedGeneration) return;
       const turn: FollowUp = { question: askedQuestion, answer: data.answer, language: answerLanguage, createdAt: new Date().toISOString() };
       setFollowUps(turns => [...turns, turn]); setQuestion('');
@@ -249,7 +245,7 @@ export default function HomeScreen() {
               {image && <Pressable accessibilityRole="button" onPress={removeImage} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Remove image</Text></Pressable>}
               {image && <Pressable accessibilityRole="button" disabled={explaining || asking || historyLoading} onPress={explainImage} style={({ pressed }) => [s.explain, pressed && s.pressed, (explaining || asking || historyLoading) && s.disabled]}>{explaining ? <><ActivityIndicator color="#FFFFFF" size="small" /><Text style={s.primaryText}>Preparing explanation…</Text></> : <Text style={s.primaryText}>✦  Explain this image</Text>}</Pressable>}
               <Pressable accessibilityRole="button" onPress={takePhoto} style={({ pressed }) => [s.secondary, pressed && s.pressed]}><Text style={s.secondaryText}>Take a photo</Text></Pressable>
-              <Text style={s.caption}>{image ? `${Math.max(0, FREE_REQUESTS - requestCount)} free requests remaining in this session` : 'Choose a picture to get started'}</Text>
+              <Text style={s.caption}>{image ? 'Ready to explain another picture whenever you are.' : 'Choose a picture to get started'}</Text>
               {!!notice && <Text accessibilityLiveRegion="polite" style={s.notice}>{notice}</Text>}
               {!!explanation && <Text accessibilityLiveRegion="polite" style={s.explanation}>{explanation}</Text>}
               {!!saveStatus && <Text accessibilityLiveRegion="polite" style={s.caption}>{saveStatus}</Text>}
